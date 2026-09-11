@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>애플 스네이크</title>
+    <style>
+      :root {
+        --bg: #0c0d0b;
+        --surface: #141512;
+        --board: #171914;
+        --fg: #e8ebe4;
+        --muted: #8b9184;
+        --accent: #c44536;
+        --leaf: #7d8f6a;
+        --border: #2a2c26;
+        --radius-sm: 8px;
+        --radius-md: 12px;
+        --radius-lg: 20px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 24px;
+        --font-sans: "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+        --font-display: "Iowan Old Style", Palatino, "Noto Serif KR", serif;
+        --motion-fast: 250ms;
+        --motion-quick: 150ms;
+        --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      button:not(:disabled) {
+        cursor: pointer;
+      }
+
+      body {
+        display: flex;
+        min-height: 100dvh;
+        align-items: center;
+        justify-content: center;
+        padding: var(--space-5) var(--space-4);
+        padding-bottom: max(var(--space-5), env(safe-area-inset-bottom));
+      }
+
+      .app {
+        width: min(100%, 28rem);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--space-5);
+      }
+
+      header {
+        text-align: center;
+      }
+
+      .kicker {
+        margin: 0;
+        font-size: 0.7rem;
+        font-weight: 500;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--leaf);
+      }
+
+      h1 {
+        margin: 4px 0 0;
+        font-family: var(--font-display);
+        font-size: 1.875rem;
+        font-weight: 600;
+        letter-spacing: -0.03em;
+        line-height: 1.2;
+      }
+
+      .lede {
+        margin: 8px 0 0;
+        font-size: 0.875rem;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+
+      .stage {
+        position: relative;
+        width: min(100%, 400px);
+        touch-action: none;
+        outline: none;
+      }
+
+      .board-frame {
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: var(--board);
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+        height: auto;
+        aspect-ratio: 1;
+      }
+
+      .overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--radius-lg);
+        background: color-mix(in oklab, var(--bg) 72%, transparent);
+      }
+
+      .overlay[hidden] {
+        display: none;
+      }
+
+      .dialog {
+        width: min(100% - 2rem, 16rem);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--space-3);
+        padding: 24px 20px;
+        border-radius: var(--radius-lg);
+        background: var(--surface);
+        text-align: center;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+        outline: 1px solid var(--border);
+        animation: dialog-in var(--motion-fast) var(--ease-out);
+      }
+
+      .dialog h2 {
+        margin: 0;
+        font-family: var(--font-display);
+        font-size: 1.25rem;
+        font-weight: 600;
+      }
+
+      .dialog p {
+        margin: 0;
+        font-size: 0.875rem;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+
+      .dialog button {
+        min-height: 44px;
+        margin-top: 4px;
+        padding: 0 16px;
+        border: 0;
+        border-radius: var(--radius-sm);
+        background: var(--fg);
+        color: var(--bg);
+        font: inherit;
+        font-size: 0.875rem;
+        font-weight: 500;
+        transition: opacity var(--motion-quick) var(--ease-out), transform var(--motion-quick) var(--ease-out);
+      }
+
+      .dialog button:hover {
+        opacity: 0.9;
+      }
+
+      .dialog button:active {
+        transform: scale(0.98);
+      }
+
+      .hud {
+        width: min(100%, 400px);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 0.875rem;
+      }
+
+      .hud strong {
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .hint {
+        margin: 0;
+        font-size: 0.875rem;
+        color: var(--muted);
+      }
+
+      .hint[hidden] {
+        display: none;
+      }
+
+      .pad {
+        display: none;
+        grid-template-columns: repeat(3, 48px);
+        gap: var(--space-2);
+      }
+
+      .pad button {
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        color: var(--fg);
+        transition: transform var(--motion-quick) var(--ease-out);
+      }
+
+      .pad button:active {
+        transform: scale(0.95);
+      }
+
+      .pad svg {
+        width: 20px;
+        height: 20px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      @media (max-width: 720px) {
+        .pad {
+          display: grid;
+        }
+      }
+
+      @keyframes dialog-in {
+        from {
+          opacity: 0;
+          transform: scale(0.96);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .dialog {
+          animation: none;
+        }
+        .dialog button,
+        .pad button {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <header>
+        <p class="kicker">Apple Snake</p>
+        <h1>애플 스네이크</h1>
+        <p class="lede">방향키로 이동하고, 과일을 먹으면 몸이 자라납니다.</p>
+      </header>
+
+      <div class="stage" id="stage" tabindex="0">
+        <div class="board-frame">
+          <canvas id="board" width="400" height="400" aria-label="스네이크 게임 보드"></canvas>
+        </div>
+        <div class="overlay" id="overlay" hidden>
+          <div class="dialog">
+            <h2>게임 종료</h2>
+            <p>뱀이 자신의 몸에 부딪혔습니다.</p>
+            <button type="button" id="restart">다시 하기</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="hud">
+        <p>길이 <strong id="length">1</strong></p>
+        <p id="fruit-name">사과</p>
+      </div>
+      <p class="hint" id="hint">방향키를 눌러 이동을 시작하세요</p>
+
+      <div class="pad" aria-hidden="false">
+        <span></span>
+        <button type="button" data-dir="ArrowUp" aria-label="위">
+          <svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6" /></svg>
+        </button>
+        <span></span>
+        <button type="button" data-dir="ArrowLeft" aria-label="왼쪽">
+          <svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" /></svg>
+        </button>
+        <button type="button" data-dir="ArrowDown" aria-label="아래">
+          <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" /></svg>
+        </button>
+        <button type="button" data-dir="ArrowRight" aria-label="오른쪽">
+          <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg>
+        </button>
+      </div>
+    </main>
+
+    <script>
+      (function () {
+        const GRID = 20;
+        const CELL = 20;
+        const CANVAS = GRID * CELL;
+        const TICK_MS = 100;
+
+        const DIRS = {
+          ArrowUp: { x: 0, y: -1 },
+          ArrowDown: { x: 0, y: 1 },
+          ArrowLeft: { x: -1, y: 0 },
+          ArrowRight: { x: 1, y: 0 },
+        };
+
+        const CODE_TO_ARROW = {
+          ArrowUp: "ArrowUp",
+          ArrowDown: "ArrowDown",
+          ArrowLeft: "ArrowLeft",
+          ArrowRight: "ArrowRight",
+          KeyW: "ArrowUp",
+          KeyS: "ArrowDown",
+          KeyA: "ArrowLeft",
+          KeyD: "ArrowRight",
+        };
+
+        const canvas = document.getElementById("board");
+        const overlay = document.getElementById("overlay");
+        const lengthEl = document.getElementById("length");
+        const fruitNameEl = document.getElementById("fruit-name");
+        const hintEl = document.getElementById("hint");
+        const stage = document.getElementById("stage");
+        const ctx = canvas.getContext("2d");
+
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        canvas.width = CANVAS * dpr;
+        canvas.height = CANVAS * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        function circle(x, y, r, fill) {
+          ctx.beginPath();
+          ctx.arc(x, y, r, 0, Math.PI * 2);
+          ctx.fillStyle = fill;
+          ctx.fill();
+        }
+
+        const FRUITS = [
+          {
+            id: "apple",
+            name: "사과",
+            draw(cx, cy, r) {
+              circle(cx, cy + 1, r * 0.78, "#d63d32");
+              circle(cx - r * 0.22, cy - r * 0.1, r * 0.22, "rgba(255,255,255,0.28)");
+              ctx.strokeStyle = "#5c3a1e";
+              ctx.lineWidth = 1.4;
+              ctx.beginPath();
+              ctx.moveTo(cx, cy - r * 0.55);
+              ctx.lineTo(cx, cy - r * 0.9);
+              ctx.stroke();
+              ctx.fillStyle = "#6f8f45";
+              ctx.beginPath();
+              ctx.ellipse(cx + r * 0.35, cy - r * 0.72, r * 0.32, r * 0.16, -0.5, 0, Math.PI * 2);
+              ctx.fill();
+            },
+          },
+          {
+            id: "banana",
+            name: "바나나",
+            draw(cx, cy, r) {
+              ctx.strokeStyle = "#e6c229";
+              ctx.lineWidth = r * 0.55;
+              ctx.lineCap = "round";
+              ctx.beginPath();
+              ctx.arc(cx + r * 0.15, cy, r * 0.7, 0.4, 2.4);
+              ctx.stroke();
+              ctx.strokeStyle = "#c9a31a";
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.arc(cx + r * 0.15, cy, r * 0.7, 0.55, 2.2);
+              ctx.stroke();
+            },
+          },
+          {
+            id: "grape",
+            name: "포도",
+            draw(cx, cy, r) {
+              const s = r * 0.34;
+              circle(cx - s, cy - s * 0.2, s, "#6b3d8a");
+              circle(cx + s, cy - s * 0.2, s, "#7a4a9a");
+              circle(cx, cy + s * 0.9, s, "#5a2f78");
+              ctx.fillStyle = "#6f8f45";
+              ctx.beginPath();
+              ctx.ellipse(cx + s * 0.6, cy - r * 0.7, r * 0.28, r * 0.14, 0.4, 0, Math.PI * 2);
+              ctx.fill();
+            },
+          },
+          {
+            id: "orange",
+            name: "오렌지",
+            draw(cx, cy, r) {
+              circle(cx, cy, r * 0.78, "#e07a22");
+              ctx.strokeStyle = "rgba(255,220,160,0.45)";
+              ctx.lineWidth = 1;
+              for (let i = 0; i < 6; i++) {
+                const a = (i / 6) * Math.PI * 2;
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.lineTo(cx + Math.cos(a) * r * 0.7, cy + Math.sin(a) * r * 0.7);
+                ctx.stroke();
+              }
+              circle(cx, cy, r * 0.1, "#f3d9a4");
+            },
+          },
+          {
+            id: "strawberry",
+            name: "딸기",
+            draw(cx, cy, r) {
+              ctx.fillStyle = "#e23b4a";
+              ctx.beginPath();
+              ctx.moveTo(cx, cy + r * 0.85);
+              ctx.quadraticCurveTo(cx + r * 0.85, cy + r * 0.1, cx + r * 0.45, cy - r * 0.25);
+              ctx.lineTo(cx - r * 0.45, cy - r * 0.25);
+              ctx.quadraticCurveTo(cx - r * 0.85, cy + r * 0.1, cx, cy + r * 0.85);
+              ctx.fill();
+              ctx.fillStyle = "#f6e27a";
+              for (const [sx, sy] of [
+                [-0.2, 0.05],
+                [0.18, 0.12],
+                [0, 0.4],
+              ]) {
+                circle(cx + r * sx, cy + r * sy, 0.7, "#f6e27a");
+              }
+              ctx.fillStyle = "#5f8a3a";
+              ctx.beginPath();
+              ctx.moveTo(cx, cy - r * 0.15);
+              ctx.lineTo(cx - r * 0.42, cy - r * 0.7);
+              ctx.lineTo(cx + r * 0.42, cy - r * 0.7);
+              ctx.closePath();
+              ctx.fill();
+            },
+          },
+          {
+            id: "watermelon",
+            name: "수박",
+            draw(cx, cy, r) {
+              circle(cx, cy, r * 0.82, "#2f7a3a");
+              circle(cx, cy, r * 0.62, "#f3f0ea");
+              circle(cx, cy, r * 0.52, "#e24a4a");
+              circle(cx - 2, cy, 0.7, "#1a1a14");
+              circle(cx + 2.2, cy + 1.5, 0.7, "#1a1a14");
+              circle(cx + 0.4, cy - 2, 0.7, "#1a1a14");
+            },
+          },
+          {
+            id: "cherry",
+            name: "체리",
+            draw(cx, cy, r) {
+              ctx.strokeStyle = "#4a3320";
+              ctx.lineWidth = 1.2;
+              ctx.beginPath();
+              ctx.moveTo(cx, cy - r * 0.7);
+              ctx.quadraticCurveTo(cx - 4, cy - r * 0.2, cx - 3.2, cy + 1);
+              ctx.moveTo(cx, cy - r * 0.7);
+              ctx.quadraticCurveTo(cx + 4, cy - r * 0.2, cx + 3.4, cy + 1);
+              ctx.stroke();
+              circle(cx - 3.2, cy + 2.2, r * 0.42, "#c81e2a");
+              circle(cx + 3.4, cy + 2.2, r * 0.42, "#e0343c");
+            },
+          },
+          {
+            id: "peach",
+            name: "복숭아",
+            draw(cx, cy, r) {
+              circle(cx - 1, cy + 1, r * 0.72, "#f0a06a");
+              circle(cx + 1.5, cy + 1, r * 0.62, "#ef8b8b");
+              ctx.fillStyle = "#6f8f45";
+              ctx.beginPath();
+              ctx.ellipse(cx + 3, cy - r * 0.55, r * 0.3, r * 0.14, 0.6, 0, Math.PI * 2);
+              ctx.fill();
+            },
+          },
+          {
+            id: "lemon",
+            name: "레몬",
+            draw(cx, cy, r) {
+              ctx.save();
+              ctx.translate(cx, cy);
+              ctx.rotate(-0.4);
+              ctx.beginPath();
+              ctx.ellipse(0, 0, r * 0.82, r * 0.55, 0, 0, Math.PI * 2);
+              ctx.fillStyle = "#e8d34a";
+              ctx.fill();
+              ctx.beginPath();
+              ctx.ellipse(-r * 0.2, -r * 0.12, r * 0.22, r * 0.14, 0, 0, Math.PI * 2);
+              ctx.fillStyle = "rgba(255,255,255,0.35)";
+              ctx.fill();
+              ctx.restore();
+            },
+          },
+          {
+            id: "kiwi",
+            name: "키위",
+            draw(cx, cy, r) {
+              circle(cx, cy, r * 0.8, "#8a6a3b");
+              circle(cx, cy, r * 0.62, "#8dbb4a");
+              circle(cx, cy, r * 0.22, "#f3f0ea");
+              for (let i = 0; i < 8; i++) {
+                const a = (i / 8) * Math.PI * 2;
+                circle(cx + Math.cos(a) * r * 0.38, cy + Math.sin(a) * r * 0.38, 0.7, "#2a2418");
+              }
+            },
+          },
+          {
+            id: "pear",
+            name: "배",
+            draw(cx, cy, r) {
+              circle(cx, cy + r * 0.22, r * 0.62, "#d6c24a");
+              circle(cx, cy - r * 0.28, r * 0.42, "#c5d36a");
+              ctx.strokeStyle = "#5c3a1e";
+              ctx.lineWidth = 1.3;
+              ctx.beginPath();
+              ctx.moveTo(cx, cy - r * 0.55);
+              ctx.lineTo(cx, cy - r * 0.88);
+              ctx.stroke();
+            },
+          },
+          {
+            id: "blueberry",
+            name: "블루베리",
+            draw(cx, cy, r) {
+              circle(cx - 3, cy + 1, r * 0.4, "#3b4ea0");
+              circle(cx + 3.2, cy + 0.4, r * 0.38, "#4a5fbf");
+              circle(cx, cy - 3, r * 0.36, "#2f3f86");
+            },
+          },
+          {
+            id: "mango",
+            name: "망고",
+            draw(cx, cy, r) {
+              ctx.save();
+              ctx.translate(cx, cy);
+              ctx.rotate(0.35);
+              ctx.beginPath();
+              ctx.ellipse(0, 0, r * 0.55, r * 0.78, 0, 0, Math.PI * 2);
+              ctx.fillStyle = "#e8a12a";
+              ctx.fill();
+              ctx.beginPath();
+              ctx.ellipse(-r * 0.12, -r * 0.18, r * 0.18, r * 0.28, 0, 0, Math.PI * 2);
+              ctx.fillStyle = "rgba(255,255,255,0.22)";
+              ctx.fill();
+              ctx.restore();
+              ctx.fillStyle = "#6f8f45";
+              ctx.beginPath();
+              ctx.ellipse(cx + r * 0.2, cy - r * 0.7, r * 0.28, r * 0.14, 0.5, 0, Math.PI * 2);
+              ctx.fill();
+            },
+          },
+          {
+            id: "plum",
+            name: "자두",
+            draw(cx, cy, r) {
+              circle(cx, cy + 1, r * 0.74, "#6a2d6e");
+              circle(cx - r * 0.18, cy - r * 0.08, r * 0.18, "rgba(255,255,255,0.22)");
+              ctx.strokeStyle = "#5c3a1e";
+              ctx.lineWidth = 1.3;
+              ctx.beginPath();
+              ctx.moveTo(cx, cy - r * 0.5);
+              ctx.lineTo(cx, cy - r * 0.82);
+              ctx.stroke();
+            },
+          },
+          {
+            id: "pineapple",
+            name: "파인애플",
+            draw(cx, cy, r) {
+              ctx.fillStyle = "#d4a017";
+              ctx.beginPath();
+              ctx.ellipse(cx, cy + r * 0.18, r * 0.52, r * 0.58, 0, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.strokeStyle = "rgba(90,60,10,0.45)";
+              ctx.lineWidth = 1;
+              for (let i = -2; i <= 2; i++) {
+                ctx.beginPath();
+                ctx.moveTo(cx - r * 0.4, cy + i * 3);
+                ctx.lineTo(cx + r * 0.4, cy + i * 3 + 4);
+                ctx.stroke();
+              }
+              ctx.fillStyle = "#5f8a3a";
+              ctx.beginPath();
+              ctx.moveTo(cx, cy - r * 0.2);
+              ctx.lineTo(cx - r * 0.28, cy - r * 0.85);
+              ctx.lineTo(cx, cy - r * 0.55);
+              ctx.lineTo(cx + r * 0.28, cy - r * 0.85);
+              ctx.closePath();
+              ctx.fill();
+            },
+          },
+        ];
+
+        function same(a, b) {
+          return a.x === b.x && a.y === b.y;
+        }
+
+        function pickFruitKind(preferApple) {
+          // 첫 과일은 사과를 기본으로 두고, 이후에는 여러 과일이 등장한다.
+          if (preferApple) return FRUITS[0];
+          return FRUITS[Math.floor(Math.random() * FRUITS.length)];
+        }
+
+        function spawnFruit(snake, preferApple) {
+          const occupied = new Set(snake.map((p) => p.x + "," + p.y));
+          const empty = [];
+          for (let y = 0; y < GRID; y++) {
+            for (let x = 0; x < GRID; x++) {
+              // 뱀이 차지한 칸에는 과일을 놓지 않는다.
+              if (!occupied.has(x + "," + y)) empty.push({ x, y });
+            }
+          }
+          const spot = empty[Math.floor(Math.random() * empty.length)] || { x: 0, y: 0 };
+          return { x: spot.x, y: spot.y, kind: pickFruitKind(preferApple) };
+        }
+
+        function roundRect(x, y, w, h, r) {
+          const radius = Math.min(r, w / 2, h / 2);
+          ctx.beginPath();
+          ctx.moveTo(x + radius, y);
+          ctx.arcTo(x + w, y, x + w, y + h, radius);
+          ctx.arcTo(x + w, y + h, x, y + h, radius);
+          ctx.arcTo(x, y + h, x, y, radius);
+          ctx.arcTo(x, y, x + w, y, radius);
+          ctx.closePath();
+        }
+
+        let snake = [{ x: 10, y: 10 }];
+        let dir = { x: 0, y: 0 };
+        let pending = null;
+        let firstFruit = true;
+        let fruit = spawnFruit(snake, firstFruit);
+        firstFruit = false;
+        let gameOver = false;
+        let raf = 0;
+        let acc = 0;
+        let last = performance.now();
+        let running = true;
+
+        function publish() {
+          lengthEl.textContent = String(snake.length);
+          fruitNameEl.textContent = fruit.kind.name;
+          overlay.hidden = !gameOver;
+          const started = !(dir.x === 0 && dir.y === 0) || snake.length > 1;
+          hintEl.hidden = started || gameOver;
+        }
+
+        function reset() {
+          snake = [{ x: 10, y: 10 }];
+          dir = { x: 0, y: 0 };
+          pending = null;
+          firstFruit = true;
+          fruit = spawnFruit(snake, firstFruit);
+          firstFruit = false;
+          gameOver = false;
+          acc = 0;
+          last = performance.now();
+          publish();
+          draw();
+        }
+
+        function setDir(key) {
+          // 게임이 끝난 뒤에는 방향 입력을 받지 않는다.
+          if (gameOver) return;
+          // 방향키가 아닌 입력은 무시한다.
+          if (!(key in DIRS)) return;
+
+          const next = DIRS[key];
+          const cur = pending || dir;
+
+          // 반대 방향으로는 바로 꺾이지 않도록 비교한다.
+          if (key === "ArrowLeft") {
+            // 오른쪽으로 가는 중이면 왼쪽 키를 무시한다.
+            if (cur.x === 1) return;
+          }
+          if (key === "ArrowRight") {
+            // 왼쪽으로 가는 중이면 오른쪽 키를 무시한다.
+            if (cur.x === -1) return;
+          }
+          if (key === "ArrowUp") {
+            // 아래로 가는 중이면 위 키를 무시한다.
+            if (cur.y === 1) return;
+          }
+          if (key === "ArrowDown") {
+            // 위로 가는 중이면 아래 키를 무시한다.
+            if (cur.y === -1) return;
+          }
+
+          pending = next;
+          // 아직 정지 상태라면 바로 방향만 잡아 첫 이동을 준비한다.
+          if (dir.x === 0 && dir.y === 0) {
+            dir = next;
+            pending = null;
+            publish();
+          }
+        }
+
+        function tick() {
+          // 종료된 게임은 더 이상 전진하지 않는다.
+          if (gameOver) return;
+
+          // 예약된 방향이 있으면 이번 틱에 반영한다.
+          if (pending) {
+            dir = pending;
+            pending = null;
+          }
+
+          // 아직 방향키가 눌리지 않았으면 제자리에 있는다.
+          if (dir.x === 0 && dir.y === 0) return;
+
+          const head = snake[0];
+          const next = { x: head.x + dir.x, y: head.y + dir.y };
+
+          // 캔버스 벽에 닿으면 이동을 멈추고 이번 틱은 끝낸다.
+          if (next.x < 0 || next.x >= GRID || next.y < 0 || next.y >= GRID) {
+            return;
+          }
+
+          const eating = same(next, fruit);
+          const hitBody = snake.some(function (seg, i) {
+            // 꼬리 칸은 이번 틱에 빠지므로, 과일을 먹지 않는 한 충돌로 보지 않는다.
+            const isVacatingTail = !eating && i === snake.length - 1;
+            if (isVacatingTail) return false;
+            return same(seg, next);
+          });
+
+          // 머리가 자신의 몸과 부딪히면 게임을 종료한다.
+          if (hitBody) {
+            gameOver = true;
+            publish();
+            return;
+          }
+
+          snake = [next].concat(snake);
+          // 과일을 먹지 않았다면 꼬리를 잘라 길이를 유지한다.
+          if (!eating) {
+            snake.pop();
+          } else {
+            fruit = spawnFruit(snake, false);
+          }
+          publish();
+        }
+
+        function drawBoard() {
+          ctx.fillStyle = "#171914";
+          ctx.fillRect(0, 0, CANVAS, CANVAS);
+          for (let y = 0; y < GRID; y++) {
+            for (let x = 0; x < GRID; x++) {
+              // 격자 칸을 체크무늬로 나눠 읽기 쉽게 한다.
+              if ((x + y) % 2 === 0) {
+                ctx.fillStyle = "#1c1f18";
+                ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+              }
+            }
+          }
+        }
+
+        function drawSnake() {
+          snake.forEach(function (seg, i) {
+            const pad = i === 0 ? 1.5 : 2.5;
+            const x = seg.x * CELL + pad;
+            const y = seg.y * CELL + pad;
+            const s = CELL - pad * 2;
+            const t = snake.length <= 1 ? 0 : i / (snake.length - 1);
+            ctx.fillStyle = i === 0 ? "#e24a3a" : "rgb(" + (176 - t * 50) + ", " + (48 - t * 10) + ", 40)";
+            roundRect(x, y, s, s, 4);
+            ctx.fill();
+          });
+
+          const head = snake[0];
+          // 머리가 없으면 눈을 그리지 않는다.
+          if (!head) return;
+          const face = dir.x === 0 && dir.y === 0 ? { x: 1, y: 0 } : dir;
+          const cx = head.x * CELL + CELL / 2;
+          const cy = head.y * CELL + CELL / 2;
+          const ex = face.x * 3.2;
+          const ey = face.y * 3.2;
+          const ox = face.y * 3.4;
+          const oy = -face.x * 3.4;
+          circle(cx - ox + ex, cy - oy + ey, 2.1, "#f4f1ea");
+          circle(cx + ox + ex, cy + oy + ey, 2.1, "#f4f1ea");
+          circle(cx - ox + ex * 1.4, cy - oy + ey * 1.4, 1, "#1a1a14");
+          circle(cx + ox + ex * 1.4, cy + oy + ey * 1.4, 1, "#1a1a14");
+        }
+
+        function draw() {
+          drawBoard();
+          fruit.kind.draw(fruit.x * CELL + CELL / 2, fruit.y * CELL + CELL / 2, CELL / 2);
+          drawSnake();
+        }
+
+        function loop(now) {
+          // 루프가 꺼져 있으면 더 이상 그리지 않는다.
+          if (!running) return;
+          const dt = Math.min((now - last) / 1000, 0.1);
+          last = now;
+          acc += dt * 1000;
+          // 100ms마다 한 칸씩 전진한다.
+          while (acc >= TICK_MS) {
+            tick();
+            acc -= TICK_MS;
+          }
+          draw();
+          raf = requestAnimationFrame(loop);
+        }
+
+        function onKeyDown(e) {
+          const key = CODE_TO_ARROW[e.code];
+          // 게임 방향키가 아니면 기본 동작을 그대로 둔다.
+          if (!key) return;
+          e.preventDefault();
+          setDir(key);
+        }
+
+        window.addEventListener("keydown", onKeyDown);
+        window.addEventListener("blur", function () {
+          pending = null;
+        });
+
+        document.getElementById("restart").addEventListener("click", reset);
+
+        document.querySelectorAll(".pad button").forEach(function (btn) {
+          btn.addEventListener("pointerdown", function (e) {
+            e.preventDefault();
+            setDir(btn.getAttribute("data-dir"));
+          });
+        });
+
+        let swipe = null;
+        stage.addEventListener("pointerdown", function (e) {
+          swipe = { x: e.clientX, y: e.clientY };
+          stage.focus();
+        });
+        stage.addEventListener("pointerup", function (e) {
+          // 스와이프가 시작되지 않았으면 방향을 바꾸지 않는다.
+          if (!swipe) return;
+          const dx = e.clientX - swipe.x;
+          const dy = e.clientY - swipe.y;
+          swipe = null;
+          // 작은 움직임은 탭으로 보고 무시한다.
+          if (Math.abs(dx) < 18 && Math.abs(dy) < 18) return;
+          // 스와이프 축이 더 큰 쪽으로 방향을 정한다.
+          if (Math.abs(dx) > Math.abs(dy)) {
+            setDir(dx > 0 ? "ArrowRight" : "ArrowLeft");
+          } else {
+            setDir(dy > 0 ? "ArrowDown" : "ArrowUp");
+          }
+        });
+        stage.addEventListener("pointercancel", function () {
+          swipe = null;
+        });
+
+        window.__snake = {
+          setDir: setDir,
+          restart: reset,
+          getState: function () {
+            return {
+              snake: snake.map(function (p) {
+                return { x: p.x, y: p.y };
+              }),
+              fruit: { x: fruit.x, y: fruit.y, name: fruit.kind.name },
+              over: gameOver,
+              dir: { x: dir.x, y: dir.y },
+              started: !(dir.x === 0 && dir.y === 0) || snake.length > 1,
+            };
+          },
+        };
+
+        publish();
+        draw();
+        raf = requestAnimationFrame(loop);
+        stage.focus();
+      })();
+    </script>
+  </body>
+</html>
